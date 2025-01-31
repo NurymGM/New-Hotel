@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 
 	"github.com/NurymGM/New-Hotel/initializers"
@@ -18,7 +20,7 @@ func CreatePost(c *gin.Context) {
 	result := initializers.DB.Create(&post)
 	if result.Error != nil {
 		c.IndentedJSON(http.StatusInternalServerError, gin.H{"message": "Couldnt create a post"})
-        return
+		return
 	}
 
 	// return it
@@ -38,9 +40,38 @@ func ReadPostByID(c *gin.Context) {
 	// get id from url
 	id := c.Param("id")
 
-	// get the post
+	// check Redis cache, if hit respond with it
+	value, err := initializers.RDB.Get(context.Background(), id).Result()
+	if err == nil {
+		var cachedPost models.Post // Deserialize JSON string into Post struct
+		err = json.Unmarshal([]byte(value), &cachedPost)
+		if err == nil {
+			c.IndentedJSON(http.StatusOK, cachedPost)
+			return
+		}
+	}
+
+	// else get post from PostgreSQL
 	post := models.Post{}
-	initializers.DB.First(&post, id)
+	result := initializers.DB.First(&post, id)
+
+	if result.Error != nil {
+		c.IndentedJSON(http.StatusNotFound, gin.H{"error": "Post not found"})
+		return
+	}
+
+	// Serialize post then add it to Redis cache
+	postJSON, err := json.Marshal(post)
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, gin.H{"error": "Failed to serialize post"})
+		return
+	}
+
+	err = initializers.RDB.Set(context.Background(), id, postJSON, 0).Err()
+	if err != nil {
+		c.IndentedJSON(http.StatusInternalServerError, gin.H{"error": "Failed to set value in Redis"})
+		return
+	}
 
 	// respond with it
 	c.IndentedJSON(http.StatusOK, post)
