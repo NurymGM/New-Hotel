@@ -1,4 +1,4 @@
-module github.com/NurymGM/New-Hotel // Gin + GORM + GoDotEnv + CompileDaemon
+module github.com/NurymGM/New-Hotel // Gin + GORM + GoDotEnv + CompileDaemon + PostgreSQL + Redis
 
 go 1.22.6
 
